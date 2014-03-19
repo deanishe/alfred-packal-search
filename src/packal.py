@@ -20,22 +20,28 @@ from __future__ import print_function, unicode_literals
 from datetime import datetime
 from operator import itemgetter
 from collections import defaultdict
-import re
+import subprocess
 try:
     from xml.etree import cElementTree as ET
 except ImportError:
     from xml.etree import ElementTree as ET
 
 
-from workflow import Workflow, web, ICON_INFO, ICON_WARNING
+from workflow import Workflow, web, ICON_WARNING, ICON_USER
 
 log = None
 
 DELIMITER = '➣'
 
 MANIFEST_URL = 'https://raw.github.com/packal/repository/master/manifest.xml'
-SEARCH_URL = 'http://www.packal.org/search/site/{0}'
 ICON_WFLOW = '/Applications/Alfred 2.app/Contents/Resources/workflowicon.icns'
+
+ITEM_ICONS = {
+    'workflows': ICON_WFLOW,
+    'tags': 'tag.png',
+    'categories': 'category.png',
+    'author': 'author.png'
+}
 
 
 __usage__ = """packal.py [options] <action> [<query>]
@@ -47,7 +53,16 @@ Usage:
     packal.py categories [<query>]
     packal.py versions [<query>]
     packal.py authors [<query>]
+    packal.py open <bundleid>
+    packal.py author-workflows <bundleid>
 """
+
+
+def run_alfred(query):
+    """Call Alfred with ``query``"""
+    subprocess.call([
+        'osascript', '-e',
+        'tell application "Alfred 2" to search "{} "'.format(query)])
 
 
 def relative_time(dt):
@@ -111,7 +126,12 @@ def workflow_key(workflow):
     return ' '.join(elements)
 
 
+class GoBack(Exception):
+    """Raised when Workflows should back up"""
+
+
 class PackalWorkflow(object):
+    """Encapsulates the Workflow"""
 
     def __init__(self):
         self.wf = None
@@ -119,139 +139,122 @@ class PackalWorkflow(object):
     def run(self, wf):
         from docopt import docopt
         self.wf = wf
+
         args = docopt(__usage__, argv=self.wf.args)
+
         self.workflows = self.wf.cached_data('workflows', get_workflows,
                                              max_age=1200)
         self.workflows.sort(key=itemgetter('updated'), reverse=True)
+
         log.debug('%d workflows found', len(self.workflows))
+
         self.query = args.get('<query>')
-        if args.get('tags'):
-            return self.do_tags()
-        elif args.get('categories'):
-            return self.do_categories()
-        elif args.get('authors'):
-            return self.do_authors()
+        self.bundleid = args.get('<bundleid>')
+
+        for key in ('tags', 'categories', 'versions', 'authors'):
+            if args.get(key):
+                return self._two_stage_filter(key)
+
+        if args.get('author-workflows'):
+            return self.do_author_workflows()
         elif args.get('workflows'):
-            return self.do_workflows()
+            return self._filter_workflows(self.workflows, self.query)
         elif args.get('update'):
             return self.do_update()
-        elif args.get('versions'):
-            return self.do_versions()
+        elif args.get('open'):
+            return self.do_open()
         else:
             raise ValueError('No action specified')
 
-    def do_workflows(self):
-        self._filter_workflows(self.workflows, self.query)
-        return 0
-
-    def do_tags(self):
-        tag, query = self._split_query(self.query)
-        if tag:
-            workflows = [w for w in self.workflows if tag in w['tags']]
-            self._filter_workflows(workflows, query)
-            return 0
-
-        tags = defaultdict(int)
-
-        for workflow in self.workflows:
-            for tag in workflow['tags']:
-                tags[tag] += 1
-
-        tags = sorted([(v, k) for (k, v) in tags.items()], reverse=True)
-
-        if query:
-            tags = wf.filter(query, tags, lambda t: t[1], min_score=30)
-
-        for count, tag in tags:
-            wf.add_item(tag, '{} workflows'.format(count),
-                        valid=False,
-                        autocomplete='{} {} '.format(tag, DELIMITER),
-                        icon=ICON_WFLOW)
-
-        wf.send_feedback()
-        return 0
-
-    def do_categories(self):
-        category, query = self._split_query(self.query)
-        if category:
-            workflows = [w for w in self.workflows if category in
-                         w['categories']]
-            self._filter_workflows(workflows, query)
-            return 0
-
-        categories = defaultdict(int)
-        for workflow in self.workflows:
-            for category in workflow['categories']:
-                categories[category] += 1
-        categories = sorted([(v, k) for (k, v) in categories.items()],
-                            reverse=True)
-
-        if query:
-            categories = wf.filter(query, categories, lambda t: t[1],
-                                   min_score=30)
-
-        for count, category in categories:
-            wf.add_item(category, '{} workflows'.format(count),
-                        valid=False,
-                        autocomplete='{} {} '.format(category, DELIMITER),
-                        icon=ICON_WFLOW)
-
-        wf.send_feedback()
-        return 0
-
-    def do_authors(self):
-        author, query = self._split_query(self.query)
-        if author:
-            workflows = [w for w in self.workflows if author == w['author']]
-            self._filter_workflows(workflows, query)
-            return 0
-
-        authors = defaultdict(int)
-        for workflow in self.workflows:
-            authors[workflow['author']] += 1
-        authors = sorted([(v, k) for (k, v) in authors.items()],
-                         reverse=True)
-
-        if query:
-            authors = wf.filter(query, authors, lambda t: t[1], min_score=30)
-
-        for count, author in authors:
-            wf.add_item(author, '{} workflows'.format(count),
-                        autocomplete='{} {} '.format(author, DELIMITER),
-                        icon=ICON_WFLOW)
-
-        wf.send_feedback()
-        return 0
-
-    def do_versions(self):
-        version, query = self._split_query(self.query)
-        if version:
-            workflows = [w for w in self.workflows if version in w['osx']]
-            self._filter_workflows(workflows, query)
-            return 0
-
-        versions = defaultdict(int)
-        for workflow in self.workflows:
-            for version in workflow['osx']:
-                versions[version] += 1
-        versions = sorted([(v, k) for (k, v) in versions.items()],
-                          reverse=True)
-
-        if query:
-            versions = wf.filter(query, versions, lambda t: t[1], min_score=30)
-
-        for count, version in versions:
-            wf.add_item(version, '{} workflows'.format(count),
-                        autocomplete='{} {} '.format(version, DELIMITER),
-                        icon=ICON_WFLOW)
-
-        wf.send_feedback()
-        return 0
-
     def do_update(self):
-        pass
+        """Force update of cache data"""
+        log.debug('Updating workflow list...')
+        try:
+            self.wf.cached_data('workflows', get_workflows, max_age=1)
+        except Exception as err:
+            log.debug('Update failed : {}'.format(err))
+            print('Update failed')
+            return 1
+        print('Update successful')
+        return 0
+
+    def do_open(self):
+        """Open Packal workflow page in browser"""
+        workflow = self._workflow_by_bundleid(self.bundleid)
+        log.debug('Opening : {}'.format(workflow['url']))
+        subprocess.call(['open', workflow['url']])
+        return 0
+
+    def do_author_workflows(self):
+        """Tell Alfred to show workflows by the same author"""
+        author = self._workflow_by_bundleid(self.bundleid)['author']
+        run_alfred('packal authors {} {} '.format(author, DELIMITER))
+        return 0
+
+    def _two_stage_filter(self, key):
+        """Handle queries including ``DELIMITER``
+
+        :attr:``~PackalWorkflow.query`` is split into ``subset`` and ``query``.
+        ``subset`` is the category/tag/author/OS X version name.
+
+        If there's only a ``subset``, show all matching workflows newest first.
+
+        If there's a ``subset`` and a ``query``, first get workflows matching
+        ``subset`` then filter them by ``query``.
+
+        If only ``query`` is provided, search the attribute specifed by ``key``
+
+        :param key: ``tags/categories/authors/versions``. Which attribute to
+        search.
+        """
+        try:
+            subset, query = self._split_query(self.query)
+        except GoBack:
+            query = 'packal {}'.format(key)
+            log.debug('Going back to : {}'.format(query))
+            run_alfred(query)
+            return 0
+
+        if key == 'authors':
+            key = 'author'
+        elif key == 'versions':
+            key = 'osx'
+
+        if subset:
+            if isinstance(self.workflows[0][key], list):
+                workflows = [w for w in self.workflows if subset in w[key]]
+            else:
+                workflows = [w for w in self.workflows if subset == w[key]]
+            return self._filter_workflows(workflows, query)
+
+        subsets = defaultdict(int)
+        for workflow in self.workflows:
+            if isinstance(workflow[key], list):
+                for subset in workflow[key]:
+                    subsets[subset] += 1
+            else:
+                subsets[workflow[key]] += 1
+
+        subsets = sorted([(v, k) for (k, v) in subsets.items()], reverse=True)
+
+        if query:
+            subsets = wf.filter(query, subsets, lambda t: t[1], min_score=30)
+
+        icon = ITEM_ICONS.get(key, ICON_WFLOW)
+        for count, subset in subsets:
+            wf.add_item(subset, '{} workflows'.format(count),
+                        autocomplete='{} {} '.format(subset, DELIMITER),
+                        icon=icon)
+
+        wf.send_feedback()
+        return 0
 
     def _filter_workflows(self, workflows, query):
+        """Filter ``workflows`` against ``query`` and send the results
+        to Alfred
+
+        """
+
         if query:
             workflows = self.wf.filter(query, workflows, key=workflow_key,
                                        min_score=30)
@@ -266,134 +269,26 @@ class PackalWorkflow(object):
             self.wf.add_item(workflow['name'],
                              subtitle,
                              # Pass bundle ID to Packal.org search
-                             arg=SEARCH_URL.format(workflow['bundle']),
+                             arg=workflow['bundle'],
                              valid=True,
                              icon=ICON_WFLOW)
 
         self.wf.send_feedback()
+        return 0
+
+    def _workflow_by_bundleid(self, bid):
+        for workflow in self.workflows:
+            if workflow['bundle'] == bid:
+                return workflow
+        log.error('Bundle ID not found : {}'.format(self.bundleid))
+        raise KeyError('Bundle ID unknown : {}'.format(bid))
 
     def _split_query(self, query):
         if not query or not DELIMITER in query:
             return None, query
+        elif query.endswith(DELIMITER):  # trailing space deleted
+            raise GoBack(query.rstrip(DELIMITER).strip())
         return [s.strip() for s in query.split(DELIMITER)]
-
-
-def main(wf):
-    from docopt import docopt
-    args = docopt(__usage__, argv=wf.args)
-    query = args.get('<query>')
-
-    workflows = wf.cached_data('workflows', get_workflows, max_age=1200)
-    workflows.sort(key=itemgetter('updated'), reverse=True)
-    log.debug('%d workflows found', len(workflows))
-
-    # search all fields
-    if args.get('workflows'):
-        # if DELIMITER in query:
-        #     section, query = [s.strip() for s in query.split(DELIMITER)]
-        #     section, name = section.split(':')
-
-        #     if section == 'category':
-        #         workflows = [w for w in workflows if name in w['categories']]
-
-        #     elif section == 'tag':
-        #         workflows = [w for w in workflows if name in w['tags']]
-
-        #     elif section == 'author':
-        #         workflows = [w for w in workflows if name == w['author']]
-
-        #     elif section == 'version':
-        #         workflows = [w for w in workflows if name in w['osx']]
-
-        if query:
-            workflows = wf.filter(query, workflows, key=workflow_key,
-                                  min_score=30)
-            log.debug('%d workflows match query', len(workflows))
-
-        if not workflows:
-            wf.add_item('Nothing found', 'Try a different query',
-                        valid=False, icon=ICON_WARNING)
-
-        for workflow in workflows:
-            subtitle = 'by {0}, updated {1}'.format(workflow['author'],
-                                                    relative_time(
-                                                        workflow['updated']))
-            wf.add_item(workflow['name'],
-                        subtitle,
-                        # Pass bundle ID to Packal.org search
-                        arg=SEARCH_URL.format(workflow['bundle']),
-                        valid=True,
-                        icon=ICON_WFLOW
-                        )
-
-        wf.send_feedback()
-        return 0
-
-    # search tags
-    elif args.get('tags'):
-
-        tags = defaultdict(int)
-        for workflow in workflows:
-            for tag in workflow['tags']:
-                tags[tag] += 1
-        tags = sorted([(v, k) for (k, v) in tags.items()], reverse=True)
-
-        if query:
-            tags = wf.filter(query, tags, lambda t: t[1], min_score=30)
-
-        for count, tag in tags:
-            wf.add_item(tag, '{} workflows'.format(count),
-                        valid=True,
-                        arg='tag:{}'.format(tag),
-                        icon=ICON_WFLOW)
-
-        wf.send_feedback()
-        return 0
-
-    # search categories
-    elif args.get('categories'):
-
-        categories = defaultdict(int)
-        for workflow in workflows:
-            for category in workflow['categories']:
-                categories[category] += 1
-        categories = sorted([(v, k) for (k, v) in categories.items()],
-                            reverse=True)
-
-        if query:
-            categories = wf.filter(query, categories, lambda t: t[1],
-                                   min_score=30)
-
-        for count, category in categories:
-            wf.add_item(category, '{} workflows'.format(count),
-                        valid=True,
-                        arg='category:{}'.format(category),
-                        icon=ICON_WFLOW)
-
-        wf.send_feedback()
-        return 0
-
-    # search OS X versions
-    elif args.get('versions'):
-
-        versions = defaultdict(int)
-        for workflow in workflows:
-            for version in workflow['osx']:
-                versions[version] += 1
-        versions = sorted([(v, k) for (k, v) in versions.items()],
-                          reverse=True)
-
-        if query:
-            versions = wf.filter(query, versions, lambda t: t[1], min_score=30)
-
-        for count, version in versions:
-            wf.add_item(version, '{} workflows'.format(count),
-                        valid=True,
-                        arg='version:{}'.format(version),
-                        icon=ICON_WFLOW)
-
-        wf.send_feedback()
-        return 0
 
 
 if __name__ == '__main__':
