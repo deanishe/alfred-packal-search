@@ -27,7 +27,7 @@ except ImportError:
     from xml.etree import ElementTree as ET
 
 
-from workflow import Workflow, web, ICON_WARNING, ICON_USER
+from workflow import Workflow, web, ICON_WARNING
 
 log = None
 
@@ -188,7 +188,7 @@ class PackalWorkflow(object):
     def do_author_workflows(self):
         """Tell Alfred to show workflows by the same author"""
         author = self._workflow_by_bundleid(self.bundleid)['author']
-        run_alfred('packal authors {} {} '.format(author, DELIMITER))
+        run_alfred('packal authors {} {}'.format(author, DELIMITER))
         return 0
 
     def _two_stage_filter(self, key):
