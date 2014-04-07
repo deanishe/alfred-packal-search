@@ -17,6 +17,8 @@ https://github.com/deanishe/alfred-workflow
 
 from __future__ import print_function, unicode_literals
 
+import sys
+import os
 from datetime import datetime
 from operator import itemgetter
 from collections import defaultdict
@@ -26,6 +28,8 @@ try:
 except ImportError:
     from xml.etree import ElementTree as ET
 
+sys.path.insert(0, os.path.join(os.path.basename(__file__),
+                'alfred-workflow-1.4.zip'))
 
 from workflow import Workflow, web, ICON_WARNING
 
