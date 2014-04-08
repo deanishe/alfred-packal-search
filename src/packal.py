@@ -17,16 +17,17 @@ https://github.com/deanishe/alfred-workflow
 
 from __future__ import print_function, unicode_literals
 
-import os
 from datetime import datetime
 from operator import itemgetter
 from collections import defaultdict
 import subprocess
 
 from workflow import Workflow, ICON_WARNING, ICON_INFO
-from common import (PACKAL_PIDFILE, LOCAL_PIDFILE, CACHE_MAXAGE,
+from workflow.background import is_running, run_in_background
+
+from common import (CACHE_MAXAGE,
                     STATUS_SPLITTER, STATUS_UNKNOWN, STATUS_UPDATE_AVAILABLE,
-                    STATUS_UP_TO_DATE)
+                    STATUS_UP_TO_DATE, STATUS_NOT_INSTALLED)
 
 log = None
 
@@ -35,10 +36,11 @@ DELIMITER = '➣'
 ICON_WFLOW = '/Applications/Alfred 2.app/Contents/Resources/workflowicon.icns'
 
 STATUS_SUFFIXES = {
-    STATUS_SPLITTER: '🔸',
+    STATUS_SPLITTER: '❓',
     STATUS_UNKNOWN: '',
     STATUS_UPDATE_AVAILABLE: '❗',
-    STATUS_UP_TO_DATE: '✅'
+    STATUS_UP_TO_DATE: '✅',
+    STATUS_NOT_INSTALLED: '',
 }
 
 ITEM_ICONS = {
@@ -129,32 +131,22 @@ class PackalWorkflow(object):
 
         args = docopt(__usage__, argv=self.wf.args)
 
-        self.workflows = self.wf.cached_data('packal_workflows', None,
+        self.workflows = self.wf.cached_data('workflows', None,
                                              max_age=0)
 
-        self.installed_workflows = self.wf.cached_data('local_workflows',
-                                                       None, max_age=0)
+        if self.workflows:
+            log.debug('{} workflows in cache'.format(len(self.workflows)))
+        else:
+            log.debug('0 workflows in cache')
 
         # Start update scripts if cached data is too old
-        if not self.wf.cached_data_fresh('packal_workflows',
+        if not self.wf.cached_data_fresh('workflows',
                                          max_age=CACHE_MAXAGE):
-            cmd = ['python',
-                   self.wf.workflowfile('update_packal_workflows.py')]
-            subprocess.call(cmd)
-
-        if not self.wf.cached_data_fresh('local_workflows',
-                                         max_age=CACHE_MAXAGE):
-            cmd = ['python',
-                   self.wf.workflowfile('update_local_workflows.py')]
-            subprocess.call(cmd)
+            self._update()
 
         # Notify user if cache is being updated
-        if os.path.exists(self.wf.cachefile(PACKAL_PIDFILE)):
+        if is_running('update'):
             self.wf.add_item('Updating from Packal…',
-                             valid=False, icon=ICON_INFO)
-        # Notify user if installed workflow list is being updated
-        if os.path.exists(self.wf.cachefile(LOCAL_PIDFILE)):
-            self.wf.add_item('Updating list of installed workflows…',
                              valid=False, icon=ICON_INFO)
 
         if not self.workflows:
@@ -187,22 +179,7 @@ class PackalWorkflow(object):
 
     def do_update(self):
         """Force update of cached data"""
-        log.debug('Updating workflow lists...')
-        try:
-            subprocess.call([
-                'python',
-                self.wf.workflowfile('update_packal_workflows.py'),
-                '--force-update'])
-            subprocess.call([
-                'python',
-                self.wf.workflowfile('update_local_workflows.py'),
-                '--force-update'])
-        except Exception as err:
-            log.debug('Update failed : {}'.format(err))
-            print('Update failed')
-            return 1
-        print('Update successful')
-        return 0
+        return self._update(force=True)
 
     def do_open(self):
         """Open Packal workflow page in browser"""
@@ -219,23 +196,14 @@ class PackalWorkflow(object):
 
     def do_status(self):
         """List workflows that can be updated or installed from Packal"""
-        id_workflow_map = {}
-        for workflow in self.workflows:
-            id_workflow_map[workflow['bundle']] = workflow
         results = []
-        for bundleid in self.installed_workflows:
-            status = self._workflow_status(bundleid)
-            if status == STATUS_SPLITTER:
-                results.append((0, id_workflow_map[bundleid]['updated'],
-                                id_workflow_map[bundleid]))
-            elif status == STATUS_UPDATE_AVAILABLE:
-                results.append((1, id_workflow_map[bundleid]['updated'],
-                                id_workflow_map[bundleid]))
+        for workflow in self.workflows:
+            if workflow['status'] == STATUS_UPDATE_AVAILABLE:
+                results.append((1, workflow['updated'], workflow))
+            elif workflow['status'] == STATUS_SPLITTER:
+                results.append((0, workflow['updated'], workflow))
         results.sort(reverse=True)
-        workflows = []
-        for result in results:
-            count, updated, workflow = result
-            workflows.append(workflow)
+        workflows = [t[2] for t in results]
         return self._filter_workflows(workflows, None)
 
     def _two_stage_filter(self, key):
@@ -310,8 +278,9 @@ class PackalWorkflow(object):
                              valid=False, icon=ICON_WARNING)
 
         for workflow in workflows:
-            suffix = suffix_for_status(
-                self._workflow_status(workflow['bundle']))
+            log.debug('{} status : {}'.format(workflow['name'],
+                                              workflow['status']))
+            suffix = suffix_for_status(workflow['status'])
             title = '{}{}'.format(workflow['name'], suffix)
             subtitle = 'by {0}, updated {1}'.format(workflow['author'],
                                                     relative_time(
@@ -340,35 +309,19 @@ class PackalWorkflow(object):
             raise GoBack(query.rstrip(DELIMITER).strip())
         return [s.strip() for s in query.split(DELIMITER)]
 
-    def _workflow_status(self, bundleid):
-        """Return status of workflow
-
-        STATUS_UNKNOWN = not on Packal
-        STATUS_UPDATE_AVAILABLE = update available
-        STATUS_UP_TO_DATE = from Packal, up-to-date
-        STATUS_SPLITTER = on Packal, but not installed from there
-
-        """
-        # bundleid = workflow['bundle']
-        packal_workflow = None
-        for wf in self.workflows:
-            if wf['bundle'] == bundleid:
-                packal_workflow = wf
-        if not packal_workflow:
-            return STATUS_UNKNOWN
-
-        remote_version = packal_workflow['version']
-
-        for wfid in self.installed_workflows:
-            if wfid == bundleid:
-                local_version = self.installed_workflows.get(wfid)
-                if not local_version:
-                    return STATUS_SPLITTER
-                if local_version == remote_version:
-                    return STATUS_UP_TO_DATE
-                elif local_version < remote_version:
-                    return STATUS_UPDATE_AVAILABLE
-
+    def _update(self, force=False):
+        """Update cached data"""
+        log.debug('Updating workflow lists...')
+        args = ['/usr/bin/python',
+                self.wf.workflowfile('update_workflows.py')]
+        if force:
+            args.append('--force-update')
+        log.debug('update command : {}'.format(args))
+        retcode = run_in_background('update', args)
+        if retcode:
+            log.debug('Update failed with code {}'.format(retcode))
+            return 1
+        return 0
 
 if __name__ == '__main__':
     wf = Workflow()
