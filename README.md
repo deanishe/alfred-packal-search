@@ -17,6 +17,17 @@ Search [Packal.org](http://www.packal.org/)'s collection of workflows from the c
 	+ `↩` or `⇥` — View/search workflows by selected author
 - `packal versions [query]` — View/search OS X versions and compatible workflows
 	+ `↩` or `⇥` — View/search workflows compatible with selected OS X version
+- `packal status` — Show a list of workflows that are out-of-date (❗) or are available on Packal.org, but were installed from elsewhere (❓)
+
+## Icons ##
+
+Sometimes, an icon is shown after a workflow's name. They have the following meanings:
+
+| Icon |                      Meaning                      |
+|------|---------------------------------------------------|
+| ✅    | Up-to-date                                        |
+| ❗    | Update available                                  |
+| ❓    | Available on Packal, but not installed from there |
 
 ## Thanks, Licence ##
 
