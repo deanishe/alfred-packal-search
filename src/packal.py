@@ -21,20 +21,27 @@ from datetime import datetime
 from operator import itemgetter
 from collections import defaultdict
 import subprocess
-try:
-    from xml.etree import cElementTree as ET
-except ImportError:
-    from xml.etree import ElementTree as ET
 
+from workflow import Workflow, ICON_WARNING, ICON_INFO
+from workflow.background import is_running, run_in_background
 
-from workflow import Workflow, web, ICON_WARNING
+from common import (CACHE_MAXAGE,
+                    STATUS_SPLITTER, STATUS_UNKNOWN, STATUS_UPDATE_AVAILABLE,
+                    STATUS_UP_TO_DATE, STATUS_NOT_INSTALLED)
 
 log = None
 
 DELIMITER = '➣'
 
-MANIFEST_URL = 'https://raw.github.com/packal/repository/master/manifest.xml'
 ICON_WFLOW = '/Applications/Alfred 2.app/Contents/Resources/workflowicon.icns'
+
+STATUS_SUFFIXES = {
+    STATUS_SPLITTER: '❓',
+    STATUS_UNKNOWN: '',
+    STATUS_UPDATE_AVAILABLE: '❗',
+    STATUS_UP_TO_DATE: '✅',
+    STATUS_NOT_INSTALLED: '',
+}
 
 ITEM_ICONS = {
     'workflows': ICON_WFLOW,
@@ -55,6 +62,7 @@ Usage:
     packal.py authors [<query>]
     packal.py open <bundleid>
     packal.py author-workflows <bundleid>
+    packal.py status
 """
 
 
@@ -89,31 +97,12 @@ def relative_time(dt):
         return '{:d} minutes ago'.format(minutes)
 
 
-def get_workflows():
-    """Return list of workflows available on Packal.org"""
-    workflows = []
-    r = web.get(MANIFEST_URL)
-    r.raise_for_status()
-    manifest = ET.fromstring(r.content)
-    # these elements contain multiple, |||-delimited items
-    list_elements = ('categories', 'tags', 'osx')
-    for workflow in manifest:
-        d = {}
-        for elem in workflow:
-            if elem.tag in list_elements:
-                if not elem.text:
-                    d[elem.tag] = []
-                else:
-                    d[elem.tag] = [s.strip() for s in elem.text.split('|||')]
-            # text elements
-            elif elem.text:
-                d[elem.tag] = elem.text
-            else:
-                d[elem.tag] = ''
-        # convert timestamp to datetime
-        d['updated'] = datetime.fromtimestamp(float(d['updated']))
-        workflows.append(d)
-    return workflows
+def suffix_for_status(status):
+    """Return ``title`` suffix for given status"""
+    suffix = STATUS_SUFFIXES.get(status)
+    if not suffix:
+        return ''
+    return ' {}'.format(suffix)
 
 
 def workflow_key(workflow):
@@ -142,11 +131,31 @@ class PackalWorkflow(object):
 
         args = docopt(__usage__, argv=self.wf.args)
 
-        self.workflows = self.wf.cached_data('workflows', get_workflows,
-                                             max_age=1200)
+        self.workflows = self.wf.cached_data('workflows', None,
+                                             max_age=0)
+
+        if self.workflows:
+            log.debug('{} workflows in cache'.format(len(self.workflows)))
+        else:
+            log.debug('0 workflows in cache')
+
+        # Start update scripts if cached data is too old
+        if not self.wf.cached_data_fresh('workflows',
+                                         max_age=CACHE_MAXAGE):
+            self._update()
+
+        # Notify user if cache is being updated
+        if is_running('update'):
+            self.wf.add_item('Updating from Packal…',
+                             valid=False, icon=ICON_INFO)
+
+        if not self.workflows:
+            self.wf.send_feedback()
+            return 0
+
         self.workflows.sort(key=itemgetter('updated'), reverse=True)
 
-        log.debug('%d workflows found', len(self.workflows))
+        log.debug('%d workflows found in cache', len(self.workflows))
 
         self.query = args.get('<query>')
         self.bundleid = args.get('<bundleid>')
@@ -163,20 +172,14 @@ class PackalWorkflow(object):
             return self.do_update()
         elif args.get('open'):
             return self.do_open()
+        elif args.get('status'):
+            return self.do_status()
         else:
             raise ValueError('No action specified')
 
     def do_update(self):
-        """Force update of cache data"""
-        log.debug('Updating workflow list...')
-        try:
-            self.wf.cached_data('workflows', get_workflows, max_age=1)
-        except Exception as err:
-            log.debug('Update failed : {}'.format(err))
-            print('Update failed')
-            return 1
-        print('Update successful')
-        return 0
+        """Force update of cached data"""
+        return self._update(force=True)
 
     def do_open(self):
         """Open Packal workflow page in browser"""
@@ -190,6 +193,18 @@ class PackalWorkflow(object):
         author = self._workflow_by_bundleid(self.bundleid)['author']
         run_alfred('packal authors {} {}'.format(author, DELIMITER))
         return 0
+
+    def do_status(self):
+        """List workflows that can be updated or installed from Packal"""
+        results = []
+        for workflow in self.workflows:
+            if workflow['status'] == STATUS_UPDATE_AVAILABLE:
+                results.append((1, workflow['updated'], workflow))
+            elif workflow['status'] == STATUS_SPLITTER:
+                results.append((0, workflow['updated'], workflow))
+        results.sort(reverse=True)
+        workflows = [t[2] for t in results]
+        return self._filter_workflows(workflows, None)
 
     def _two_stage_filter(self, key):
         """Handle queries including ``DELIMITER``
@@ -263,10 +278,14 @@ class PackalWorkflow(object):
                              valid=False, icon=ICON_WARNING)
 
         for workflow in workflows:
+            log.debug('{} status : {}'.format(workflow['name'],
+                                              workflow['status']))
+            suffix = suffix_for_status(workflow['status'])
+            title = '{}{}'.format(workflow['name'], suffix)
             subtitle = 'by {0}, updated {1}'.format(workflow['author'],
                                                     relative_time(
                                                         workflow['updated']))
-            self.wf.add_item(workflow['name'],
+            self.wf.add_item(title,
                              subtitle,
                              # Pass bundle ID to Packal.org search
                              arg=workflow['bundle'],
@@ -290,6 +309,19 @@ class PackalWorkflow(object):
             raise GoBack(query.rstrip(DELIMITER).strip())
         return [s.strip() for s in query.split(DELIMITER)]
 
+    def _update(self, force=False):
+        """Update cached data"""
+        log.debug('Updating workflow lists...')
+        args = ['/usr/bin/python',
+                self.wf.workflowfile('update_workflows.py')]
+        if force:
+            args.append('--force-update')
+        log.debug('update command : {}'.format(args))
+        retcode = run_in_background('update', args)
+        if retcode:
+            log.debug('Update failed with code {}'.format(retcode))
+            return 1
+        return 0
 
 if __name__ == '__main__':
     wf = Workflow()
