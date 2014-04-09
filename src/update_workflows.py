@@ -136,6 +136,8 @@ def get_workflows():
             packal_workflow['status'] = STATUS_UPDATE_AVAILABLE
         elif packal_version == local_version:
             packal_workflow['status'] = STATUS_UP_TO_DATE
+        else:
+            packal_workflow['status'] = STATUS_UNKNOWN
     return packal_workflows
 
 
