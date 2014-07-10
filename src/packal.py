@@ -320,7 +320,9 @@ class PackalWorkflow(object):
         retcode = run_in_background('update', args)
         if retcode:
             log.debug('Update failed with code {}'.format(retcode))
+            print('Update failed')
             return 1
+        print('Updating workflow list…'.encode('utf-8'))
         return 0
 
 if __name__ == '__main__':
