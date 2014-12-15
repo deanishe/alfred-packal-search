@@ -287,7 +287,6 @@ class PackalWorkflow(object):
                                                         workflow['updated']))
             self.wf.add_item(title,
                              subtitle,
-                             # Pass bundle ID to Packal.org search
                              arg=workflow['bundle'],
                              valid=True,
                              icon=ICON_WFLOW)
@@ -303,7 +302,7 @@ class PackalWorkflow(object):
         raise KeyError('Bundle ID unknown : {}'.format(bid))
 
     def _split_query(self, query):
-        if not query or not DELIMITER in query:
+        if not query or DELIMITER not in query:
             return None, query
         elif query.endswith(DELIMITER):  # trailing space deleted
             raise GoBack(query.rstrip(DELIMITER).strip())
