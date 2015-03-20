@@ -37,7 +37,20 @@ log = None
 MANIFEST_URL = 'https://raw.github.com/packal/repository/master/manifest.xml'
 WORKFLOW_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-NOT_INSTALLED = object()
+
+class Constant(object):
+
+    def __init__(self, value):
+        self.value = value
+
+    def __repr__(self):
+        return 'Constant({0:r})'.format(self.value)
+
+    def __str__(self):
+        return str(self.value)
+
+
+NOT_INSTALLED = Constant('NOT INSTALLED')
 
 
 def packal_metadata(xmlpath):
@@ -71,7 +84,7 @@ def get_installed_workflows():
 
         bundleid = readPlist(info_plist)['bundleid']
         if not bundleid:
-            print('no bundleid : {}'.format(path))
+            log.warning('no bundleid in info.plist : {0}'.format(path))
             continue
 
         metadata = {'version': None, 'bundle': bundleid}
@@ -80,7 +93,7 @@ def get_installed_workflows():
 
         workflows[metadata['bundle']] = metadata['version']
 
-    log.debug('{} workflows installed locally'.format(len(workflows)))
+    log.debug('{0} workflows installed locally'.format(len(workflows)))
     return workflows
 
 
@@ -120,13 +133,15 @@ def get_workflows():
     local_workflows = get_installed_workflows()
     packal_workflows = get_packal_workflows()
     for packal_workflow in packal_workflows:
-        log.debug('packal workflow [{}] {}'.format(packal_workflow['bundle'],
-                  packal_workflow['version']))
         # set version number
         bundle = packal_workflow.get('bundle')
         local_version = local_workflows.get(bundle, NOT_INSTALLED)
         packal_version = packal_workflow['version']
-        log.debug('local version : {}'.format(local_version))
+        log.debug('workflow `{0}` packal : {1}  local : {2}'.format(
+                  packal_workflow['bundle'],
+                  packal_workflow['version'],
+                  local_version))
+        # log.debug('local version : {0}'.format(local_version))
 
         if local_version is NOT_INSTALLED:
             packal_workflow['status'] = STATUS_NOT_INSTALLED
