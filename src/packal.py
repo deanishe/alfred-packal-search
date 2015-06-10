@@ -35,12 +35,23 @@ DELIMITER = '➣'
 
 ICON_WFLOW = '/Applications/Alfred 2.app/Contents/Resources/workflowicon.icns'
 
+# Icons shown in Alfred results
 STATUS_SUFFIXES = {
     STATUS_SPLITTER: '❓',
     STATUS_UNKNOWN: '',
     STATUS_UPDATE_AVAILABLE: '❗',
     STATUS_UP_TO_DATE: '✅',
     STATUS_NOT_INSTALLED: '',
+}
+
+
+# Map status values to names
+STATUS_NAMES = {
+    STATUS_SPLITTER: 'STATUS_SPLITTER',
+    STATUS_UNKNOWN: 'STATUS_UNKNOWN',
+    STATUS_UPDATE_AVAILABLE: 'STATUS_UPDATE_AVAILABLE',
+    STATUS_UP_TO_DATE: 'STATUS_UP_TO_DATE',
+    STATUS_NOT_INSTALLED: 'STATUS_NOT_INSTALLED',
 }
 
 ITEM_ICONS = {
@@ -62,6 +73,7 @@ Usage:
     packal.py authors [<query>]
     packal.py open <bundleid>
     packal.py author-workflows <bundleid>
+    packal.py ignore-author <author>
     packal.py status
 """
 
@@ -77,7 +89,7 @@ def relative_time(dt):
     """Human-readable relative time, e.g. '1 hour ago'"""
     td = datetime.now() - dt
     hours = (td.days * 24.0) + (td.seconds / 3600.0)
-    log.debug('{}  -->  {:0.2f} hours ago'.format(td, hours))
+    # log.debug('{}  -->  {:0.2f} hours ago'.format(td, hours))
     minutes = int(hours * 60)
     hours = int(hours)
     days = int(hours) / 24
@@ -147,6 +159,7 @@ class PackalWorkflow(object):
         # Notify user if cache is being updated
         if is_running('update'):
             self.wf.add_item('Updating from Packal…',
+                             'Please try again in a second or two',
                              valid=False, icon=ICON_INFO)
 
         if not self.workflows:
@@ -158,6 +171,7 @@ class PackalWorkflow(object):
         log.debug('%d workflows found in cache', len(self.workflows))
 
         self.query = args.get('<query>')
+        self.author = args.get('<author>')
         self.bundleid = args.get('<bundleid>')
 
         for key in ('tags', 'categories', 'versions', 'authors'):
@@ -174,6 +188,8 @@ class PackalWorkflow(object):
             return self.do_open()
         elif args.get('status'):
             return self.do_status()
+        elif args.get('ignore-author'):
+            return self.do_ignore_author()
         else:
             raise ValueError('No action specified')
 
@@ -197,7 +213,12 @@ class PackalWorkflow(object):
     def do_status(self):
         """List workflows that can be updated or installed from Packal"""
         results = []
+        ignored_authors = self.wf.settings.get('ignored_authors') or []
         for workflow in self.workflows:
+            if workflow['author'] in ignored_authors:
+                log.debug('Workflow `{}` by ignored author. Skipping.'.format(
+                          workflow['bundle']))
+                continue
             if workflow['status'] == STATUS_UPDATE_AVAILABLE:
                 results.append((1, workflow['updated'], workflow))
             elif workflow['status'] == STATUS_SPLITTER:
@@ -205,6 +226,20 @@ class PackalWorkflow(object):
         results.sort(reverse=True)
         workflows = [t[2] for t in results]
         return self._filter_workflows(workflows, None)
+
+    def do_ignore_author(self):
+        """Add author to update blacklist.
+
+        This hides workflows by the specified author in the update list.
+
+        """
+        ignored = self.wf.settings.get('ignored_authors') or []
+        ignored.append(self.author)
+        ignored = sorted(set(ignored))
+        self.wf.settings['ignored_authors'] = ignored
+        log.info('Adding `{}` to ignored authors'.format(self.author))
+        print(self.author.encode('utf-8'))
+        return 0
 
     def _two_stage_filter(self, key):
         """Handle queries including ``DELIMITER``
@@ -222,6 +257,9 @@ class PackalWorkflow(object):
         :param key: ``tags/categories/authors/versions``. Which attribute to
         search.
         """
+
+        valid = False
+
         try:
             subset, query = self._split_query(self.query)
         except GoBack:
@@ -229,9 +267,13 @@ class PackalWorkflow(object):
             log.debug('Going back to : {}'.format(query))
             run_alfred(query)
             return 0
+        else:
+            query = query.strip()
 
         if key == 'authors':
             key = 'author'
+            # Enable `ignore author`
+            valid = True
         elif key == 'versions':
             key = 'osx'
 
@@ -256,9 +298,19 @@ class PackalWorkflow(object):
             subsets = wf.filter(query, subsets, lambda t: t[1], min_score=30)
 
         icon = ITEM_ICONS.get(key, ICON_WFLOW)
+
+        if not len(subsets):
+            self.wf.add_item('Nothing found', 'Try a different query',
+                             valid=False, icon=ICON_WARNING)
+
         for count, subset in subsets:
+            arg = None
+            if valid:
+                arg = subset
             wf.add_item(subset, '{} workflows'.format(count),
                         autocomplete='{} {} '.format(subset, DELIMITER),
+                        valid=valid,
+                        arg=arg,
                         icon=icon)
 
         wf.send_feedback()
@@ -270,16 +322,19 @@ class PackalWorkflow(object):
 
         """
 
+        if isinstance(query, basestring):
+            query = query.strip()
+
         if query:
             workflows = self.wf.filter(query, workflows, key=workflow_key,
                                        min_score=30)
-        if not workflows:
+        if not len(workflows):
             self.wf.add_item('Nothing found', 'Try a different query',
                              valid=False, icon=ICON_WARNING)
 
         for workflow in workflows:
-            log.debug('{} status : {}'.format(workflow['name'],
-                                              workflow['status']))
+            log.debug('`{}` status : {}'.format(
+                      workflow['name'], STATUS_NAMES[workflow['status']]))
             suffix = suffix_for_status(workflow['status'])
             title = '{}{}'.format(workflow['name'], suffix)
             subtitle = 'by {0}, updated {1}'.format(workflow['author'],
@@ -321,7 +376,8 @@ class PackalWorkflow(object):
             log.debug('Update failed with code {}'.format(retcode))
             print('Update failed')
             return 1
-        print('Updating workflow list…'.encode('utf-8'))
+        if force:
+            print('Updating workflow list…'.encode('utf-8'))
         return 0
 
 if __name__ == '__main__':
