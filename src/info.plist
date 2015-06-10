@@ -25,6 +25,17 @@
 				<string>More workflows by this author</string>
 			</dict>
 		</array>
+		<key>2F0946FD-D324-45B8-84F3-86788182BBD2</key>
+		<array>
+			<dict>
+				<key>destinationuid</key>
+				<string>89DB3418-F317-4D6C-9F12-B977A695DC97</string>
+				<key>modifiers</key>
+				<integer>0</integer>
+				<key>modifiersubtext</key>
+				<string></string>
+			</dict>
+		</array>
 		<key>6C5C32A5-6E50-4F9C-A156-563C02F00E78</key>
 		<array>
 			<dict>
@@ -37,11 +48,11 @@
 			</dict>
 			<dict>
 				<key>destinationuid</key>
-				<string>C2D54072-5EEE-4990-85A7-247B6949AF98</string>
+				<string>2F0946FD-D324-45B8-84F3-86788182BBD2</string>
 				<key>modifiers</key>
 				<integer>1048576</integer>
 				<key>modifiersubtext</key>
-				<string>More workflows by this author</string>
+				<string>Ignore Updates by this Author</string>
 			</dict>
 		</array>
 		<key>6F1F0215-4043-45BA-A665-430289C3AF40</key>
@@ -164,6 +175,14 @@
 				<integer>102</integer>
 				<key>keyword</key>
 				<string>packal workflows</string>
+				<key>queuedelaycustom</key>
+				<integer>1</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<false/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>1</integer>
 				<key>runningsubtext</key>
 				<string>Loading Packal Workflows…</string>
 				<key>script</key>
@@ -193,6 +212,14 @@
 				<integer>102</integer>
 				<key>keyword</key>
 				<string>packal tags</string>
+				<key>queuedelaycustom</key>
+				<integer>1</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<false/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>1</integer>
 				<key>runningsubtext</key>
 				<string>Loading Packal Workflows…</string>
 				<key>script</key>
@@ -216,6 +243,8 @@
 		<dict>
 			<key>config</key>
 			<dict>
+				<key>concurrently</key>
+				<false/>
 				<key>escaping</key>
 				<integer>102</integer>
 				<key>script</key>
@@ -239,6 +268,14 @@
 				<integer>102</integer>
 				<key>keyword</key>
 				<string>packal categories</string>
+				<key>queuedelaycustom</key>
+				<integer>1</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<false/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>1</integer>
 				<key>runningsubtext</key>
 				<string>Loading Packal Workflows…</string>
 				<key>script</key>
@@ -262,6 +299,8 @@
 		<dict>
 			<key>config</key>
 			<dict>
+				<key>concurrently</key>
+				<false/>
 				<key>escaping</key>
 				<integer>102</integer>
 				<key>script</key>
@@ -285,6 +324,14 @@
 				<integer>102</integer>
 				<key>keyword</key>
 				<string>packal versions</string>
+				<key>queuedelaycustom</key>
+				<integer>1</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<false/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>1</integer>
 				<key>runningsubtext</key>
 				<string>Loading Packal Workflows…</string>
 				<key>script</key>
@@ -308,12 +355,64 @@
 		<dict>
 			<key>config</key>
 			<dict>
+				<key>concurrently</key>
+				<false/>
+				<key>escaping</key>
+				<integer>102</integer>
+				<key>script</key>
+				<string>python packal.py ignore-author "{query}"</string>
+				<key>type</key>
+				<integer>0</integer>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.action.script</string>
+			<key>uid</key>
+			<string>2F0946FD-D324-45B8-84F3-86788182BBD2</string>
+			<key>version</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>lastpathcomponent</key>
+				<false/>
+				<key>onlyshowifquerypopulated</key>
+				<false/>
+				<key>output</key>
+				<integer>0</integer>
+				<key>removeextension</key>
+				<false/>
+				<key>sticky</key>
+				<false/>
+				<key>text</key>
+				<string>Updates to workflows by {query} won't be shown</string>
+				<key>title</key>
+				<string>Author Added to Ignore List</string>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.output.notification</string>
+			<key>uid</key>
+			<string>89DB3418-F317-4D6C-9F12-B977A695DC97</string>
+			<key>version</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
 				<key>argumenttype</key>
 				<integer>1</integer>
 				<key>escaping</key>
 				<integer>102</integer>
 				<key>keyword</key>
 				<string>packal authors</string>
+				<key>queuedelaycustom</key>
+				<integer>1</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<false/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>1</integer>
 				<key>runningsubtext</key>
 				<string>Loading Packal Workflows…</string>
 				<key>script</key>
@@ -343,6 +442,14 @@
 				<integer>102</integer>
 				<key>keyword</key>
 				<string>packal status</string>
+				<key>queuedelaycustom</key>
+				<integer>1</integer>
+				<key>queuedelayimmediatelyinitially</key>
+				<false/>
+				<key>queuedelaymode</key>
+				<integer>0</integer>
+				<key>queuemode</key>
+				<integer>1</integer>
 				<key>runningsubtext</key>
 				<string>Loading your workflows…</string>
 				<key>script</key>
@@ -360,6 +467,27 @@
 			<string>alfred.workflow.input.scriptfilter</string>
 			<key>uid</key>
 			<string>8BF64D55-AF18-4CE0-A6A0-95C320CCA607</string>
+			<key>version</key>
+			<integer>0</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>argumenttype</key>
+				<integer>2</integer>
+				<key>keyword</key>
+				<string>packal update</string>
+				<key>subtext</key>
+				<string>Re-download the list of Packal workflows now</string>
+				<key>text</key>
+				<string>Force Update of Workflow List</string>
+				<key>withspace</key>
+				<false/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.input.keyword</string>
+			<key>uid</key>
+			<string>91D6BE49-93AD-4C01-94FD-A34463E5EDFF</string>
 			<key>version</key>
 			<integer>0</integer>
 		</dict>
@@ -391,6 +519,8 @@
 		<dict>
 			<key>config</key>
 			<dict>
+				<key>concurrently</key>
+				<false/>
 				<key>escaping</key>
 				<integer>102</integer>
 				<key>script</key>
@@ -402,27 +532,6 @@
 			<string>alfred.workflow.action.script</string>
 			<key>uid</key>
 			<string>FBB58205-5D96-44A1-B0D9-481809EA41A4</string>
-			<key>version</key>
-			<integer>0</integer>
-		</dict>
-		<dict>
-			<key>config</key>
-			<dict>
-				<key>argumenttype</key>
-				<integer>2</integer>
-				<key>keyword</key>
-				<string>packal update</string>
-				<key>subtext</key>
-				<string>Re-download the list of Packal workflows now</string>
-				<key>text</key>
-				<string>Force Update of Workflow List</string>
-				<key>withspace</key>
-				<false/>
-			</dict>
-			<key>type</key>
-			<string>alfred.workflow.input.keyword</string>
-			<key>uid</key>
-			<string>91D6BE49-93AD-4C01-94FD-A34463E5EDFF</string>
 			<key>version</key>
 			<integer>0</integer>
 		</dict>
@@ -441,6 +550,11 @@
 			<key>ypos</key>
 			<real>130</real>
 		</dict>
+		<key>2F0946FD-D324-45B8-84F3-86788182BBD2</key>
+		<dict>
+			<key>ypos</key>
+			<real>490</real>
+		</dict>
 		<key>6C5C32A5-6E50-4F9C-A156-563C02F00E78</key>
 		<dict>
 			<key>ypos</key>
@@ -450,6 +564,11 @@
 		<dict>
 			<key>ypos</key>
 			<real>250</real>
+		</dict>
+		<key>89DB3418-F317-4D6C-9F12-B977A695DC97</key>
+		<dict>
+			<key>ypos</key>
+			<real>490</real>
 		</dict>
 		<key>8BF64D55-AF18-4CE0-A6A0-95C320CCA607</key>
 		<dict>

@@ -73,6 +73,7 @@ Usage:
     packal.py authors [<query>]
     packal.py open <bundleid>
     packal.py author-workflows <bundleid>
+    packal.py ignore-author <author>
     packal.py status
 """
 
@@ -170,6 +171,7 @@ class PackalWorkflow(object):
         log.debug('%d workflows found in cache', len(self.workflows))
 
         self.query = args.get('<query>')
+        self.author = args.get('<author>')
         self.bundleid = args.get('<bundleid>')
 
         for key in ('tags', 'categories', 'versions', 'authors'):
@@ -186,6 +188,8 @@ class PackalWorkflow(object):
             return self.do_open()
         elif args.get('status'):
             return self.do_status()
+        elif args.get('ignore-author'):
+            return self.do_ignore_author()
         else:
             raise ValueError('No action specified')
 
@@ -209,7 +213,12 @@ class PackalWorkflow(object):
     def do_status(self):
         """List workflows that can be updated or installed from Packal"""
         results = []
+        ignored_authors = self.wf.settings.get('ignored_authors') or []
         for workflow in self.workflows:
+            if workflow['author'] in ignored_authors:
+                log.debug('Workflow `{}` by ignored author. Skipping.'.format(
+                          workflow['bundle']))
+                continue
             if workflow['status'] == STATUS_UPDATE_AVAILABLE:
                 results.append((1, workflow['updated'], workflow))
             elif workflow['status'] == STATUS_SPLITTER:
@@ -217,6 +226,20 @@ class PackalWorkflow(object):
         results.sort(reverse=True)
         workflows = [t[2] for t in results]
         return self._filter_workflows(workflows, None)
+
+    def do_ignore_author(self):
+        """Add author to update blacklist.
+
+        This hides workflows by the specified author in the update list.
+
+        """
+        ignored = self.wf.settings.get('ignored_authors') or []
+        ignored.append(self.author)
+        ignored = sorted(set(ignored))
+        self.wf.settings['ignored_authors'] = ignored
+        log.info('Adding `{}` to ignored authors'.format(self.author))
+        print(self.author.encode('utf-8'))
+        return 0
 
     def _two_stage_filter(self, key):
         """Handle queries including ``DELIMITER``
@@ -234,6 +257,9 @@ class PackalWorkflow(object):
         :param key: ``tags/categories/authors/versions``. Which attribute to
         search.
         """
+
+        valid = False
+
         try:
             subset, query = self._split_query(self.query)
         except GoBack:
@@ -246,6 +272,8 @@ class PackalWorkflow(object):
 
         if key == 'authors':
             key = 'author'
+            # Enable `ignore author`
+            valid = True
         elif key == 'versions':
             key = 'osx'
 
@@ -276,8 +304,13 @@ class PackalWorkflow(object):
                              valid=False, icon=ICON_WARNING)
 
         for count, subset in subsets:
+            arg = None
+            if valid:
+                arg = subset
             wf.add_item(subset, '{} workflows'.format(count),
                         autocomplete='{} {} '.format(subset, DELIMITER),
+                        valid=valid,
+                        arg=arg,
                         icon=icon)
 
         wf.send_feedback()
