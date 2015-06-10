@@ -15,6 +15,9 @@ Search [Packal.org](http://www.packal.org/)'s collection of workflows from the c
 	+ `↩` or `⇥` — View/search workflows in selected category
 - `packal authors [query]` — View/search workflow authors
 	+ `↩` or `⇥` — View/search workflows by selected author
+    + `⌘+↩` — Add this author to the status blacklist. This means workflows
+      by this author won't be shown in the update status list. Useful for
+      hiding your own workflows, which you presumably don't update via Packal.
 - `packal versions [query]` — View/search OS X versions and compatible workflows
 	+ `↩` or `⇥` — View/search workflows compatible with selected OS X version
 - `packal status` — Show a list of workflows that are out-of-date (❗) or are available on Packal.org, but were installed from elsewhere (❓)
