@@ -21,6 +21,7 @@ from datetime import datetime
 from operator import itemgetter
 from collections import defaultdict
 import subprocess
+import os
 
 from workflow import Workflow, ICON_WARNING, ICON_INFO
 from workflow.background import is_running, run_in_background
@@ -33,7 +34,11 @@ log = None
 
 DELIMITER = '➣'
 
+ALF3 = os.getenv('alfred_version', '').startswith('3')
+
 ICON_WFLOW = '/Applications/Alfred 2.app/Contents/Resources/workflowicon.icns'
+if ALF3:
+    ICON_WFLOW = '/Applications/Alfred 3.app/Contents/Resources/workflowicon.icns'
 
 # Icons shown in Alfred results
 STATUS_SUFFIXES = {
@@ -80,9 +85,12 @@ Usage:
 
 def run_alfred(query):
     """Call Alfred with ``query``"""
+    v = '2'
+    if ALF3:
+        v = '3'
     subprocess.call([
         'osascript', '-e',
-        'tell application "Alfred 2" to search "{} "'.format(query)])
+        'tell application "Alfred {}" to search "{} "'.format(v, query)])
 
 
 def relative_time(dt):
@@ -147,7 +155,7 @@ class PackalWorkflow(object):
                                              max_age=0)
 
         if self.workflows:
-            log.debug('{} workflows in cache'.format(len(self.workflows)))
+            log.debug('%d workflows in cache', len(self.workflows))
         else:
             log.debug('0 workflows in cache')
 
@@ -273,7 +281,7 @@ class PackalWorkflow(object):
         if key == 'authors':
             key = 'author'
             # Enable `ignore author`
-            valid = True
+            valid = False
         elif key == 'versions':
             key = 'osx'
 
@@ -333,10 +341,10 @@ class PackalWorkflow(object):
                              valid=False, icon=ICON_WARNING)
 
         for workflow in workflows:
-            log.debug('`{}` status : {}'.format(
-                      workflow['name'], STATUS_NAMES[workflow['status']]))
+            log.debug('%r status : %r', workflow['name'],
+                      STATUS_NAMES[workflow['status']])
             suffix = suffix_for_status(workflow['status'])
-            title = '{}{}'.format(workflow['name'], suffix)
+            title = workflow['name'] + suffix
             subtitle = 'by {0}, updated {1}'.format(workflow['author'],
                                                     relative_time(
                                                         workflow['updated']))
@@ -354,8 +362,8 @@ class PackalWorkflow(object):
         for workflow in self.workflows:
             if workflow['bundle'] == bid:
                 return workflow
-        log.error('Bundle ID not found : {}'.format(self.bundleid))
-        raise KeyError('Bundle ID unknown : {}'.format(bid))
+        log.error('Bundle ID not found : %s', self.bundleid)
+        raise KeyError('Bundle ID unknown : ' + bid)
 
     def _split_query(self, query):
         if not query or DELIMITER not in query:
@@ -371,15 +379,16 @@ class PackalWorkflow(object):
                 self.wf.workflowfile('update_workflows.py')]
         if force:
             args.append('--force-update')
-        log.debug('update command : {}'.format(args))
+        log.debug('update command : %r', args)
         retcode = run_in_background('update', args)
         if retcode:
-            log.debug('Update failed with code {}'.format(retcode))
+            log.debug('Update failed with code %r', retcode)
             print('Update failed')
             return 1
         if force:
             print('Updating workflow list…'.encode('utf-8'))
         return 0
+
 
 if __name__ == '__main__':
     wf = Workflow()
