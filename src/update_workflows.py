@@ -16,10 +16,11 @@ Usage:
 
 from __future__ import print_function, unicode_literals
 
+import subprocess
 import sys
 import os
 from datetime import datetime
-from plistlib import readPlist
+from plistlib import readPlist, readPlistFromString
 
 try:
     from xml.etree import cElementTree as ET
@@ -35,7 +36,9 @@ from common import (CACHE_MAXAGE, Version, STATUS_SPLITTER, STATUS_UNKNOWN,
 log = None
 
 MANIFEST_URL = 'https://raw.github.com/packal/repository/master/manifest.xml'
-WORKFLOW_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# WORKFLOW_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ALFRED_PREFS = os.path.expanduser(
+    '~/Library/Preferences/com.runningwithcrayons.Alfred-Preferences-3.plist')
 
 
 class Constant(object):
@@ -51,6 +54,34 @@ class Constant(object):
 
 
 NOT_INSTALLED = Constant('NOT INSTALLED')
+
+
+def read_plist(path):
+    """Convert plist to XML and read its contents."""
+    cmd = [b'plutil', b'-convert', b'xml1', b'-o', b'-', path]
+    xml = subprocess.check_output(cmd)
+    return readPlistFromString(xml)
+
+
+def get_workflow_directory():
+    """Return path to Alfred's workflow directory."""
+    prefs = read_plist(ALFRED_PREFS)
+    syncdir = prefs.get('syncfolder')
+
+    if not syncdir:
+        log.debug('Alfred sync folder not found')
+        return None
+
+    syncdir = os.path.expanduser(syncdir)
+    wf_dir = os.path.join(syncdir, 'Alfred.alfredpreferences/workflows')
+    log.debug('Workflow sync dir : %r', wf_dir)
+
+    if os.path.exists(wf_dir):
+        log.debug('Workflow directory retrieved from Alfred preferences')
+        return wf_dir
+
+    log.debug('Alfred.alfredpreferences/workflows not found')
+    return None
 
 
 def packal_metadata(xmlpath):
@@ -71,9 +102,11 @@ def get_installed_workflows():
     ``version`` is ``None`` if workflow isn't from Packal.org
     """
     workflows = {}
+    workflow_dir = get_workflow_directory()
 
-    for name in os.listdir(WORKFLOW_DIR):
-        path = os.path.join(WORKFLOW_DIR, name)
+    log.debug('reading workflows installed in %r ...', workflow_dir)
+    for name in os.listdir(workflow_dir):
+        path = os.path.join(workflow_dir, name)
         if not os.path.isdir(path):
             continue
 
@@ -82,18 +115,26 @@ def get_installed_workflows():
         if not os.path.exists(info_plist):
             continue
 
-        bundleid = readPlist(info_plist)['bundleid']
-        if not bundleid:
-            log.warning('no bundleid in info.plist : {0}'.format(path))
+        try:
+            bundleid = readPlist(info_plist)['bundleid']
+            if not bundleid:
+                log.warning('no bundleid in info.plist : %s', path)
+                continue
+        except Exception as err:
+            log.error('bad info.plist in workflow %r: %s', path, err)
             continue
 
-        metadata = {'version': None, 'bundle': bundleid}
-        if os.path.exists(packal_xml):
-            metadata.update(packal_metadata(packal_xml))
+        try:
+            metadata = {'version': None, 'bundle': bundleid}
+            if os.path.exists(packal_xml):
+                metadata.update(packal_metadata(packal_xml))
+        except Exception as err:
+            log.error('bad packal/package.xml in workflow %r: %s', path, err)
+            continue
 
         workflows[metadata['bundle']] = metadata['version']
 
-    log.debug('{0} workflows installed locally'.format(len(workflows)))
+    log.debug('%d workflows installed locally', len(workflows))
     return workflows
 
 
@@ -129,7 +170,7 @@ def get_packal_workflows():
 
 
 def get_workflows():
-    """Return list of workflows on on Packal.org with update status"""
+    """Return list of workflows on on Packal.org with update status."""
     local_workflows = get_installed_workflows()
     packal_workflows = get_packal_workflows()
     for packal_workflow in packal_workflows:

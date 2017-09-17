@@ -8,12 +8,7 @@
 # Created on 2014-03-03
 #
 
-"""
-Simple search of Packal.org for workflows based on the exported manifest.xml
-
-Uses Alfred-Workflow library:
-https://github.com/deanishe/alfred-workflow
-"""
+"""Search Packal.org for workflows based on the exported manifest.xml"""
 
 from __future__ import print_function, unicode_literals
 
@@ -136,11 +131,11 @@ def workflow_key(workflow):
 
 
 class GoBack(Exception):
-    """Raised when Workflows should back up"""
+    """Raised when Workflows should back up."""
 
 
 class PackalWorkflow(object):
-    """Encapsulates the Workflow"""
+    """Encapsulates the Workflow."""
 
     def __init__(self):
         self.wf = None
@@ -227,10 +222,12 @@ class PackalWorkflow(object):
                 log.debug('Workflow `{}` by ignored author. Skipping.'.format(
                           workflow['bundle']))
                 continue
+
             if workflow['status'] == STATUS_UPDATE_AVAILABLE:
                 results.append((1, workflow['updated'], workflow))
             elif workflow['status'] == STATUS_SPLITTER:
                 results.append((0, workflow['updated'], workflow))
+
         results.sort(reverse=True)
         workflows = [t[2] for t in results]
         return self._filter_workflows(workflows, None)
@@ -264,15 +261,15 @@ class PackalWorkflow(object):
 
         :param key: ``tags/categories/authors/versions``. Which attribute to
         search.
-        """
 
+        """
         valid = False
 
         try:
             subset, query = self._split_query(self.query)
         except GoBack:
-            query = 'packal {}'.format(key)
-            log.debug('Going back to : {}'.format(query))
+            query = 'packal ' + key
+            log.debug('Going back to : %s', query)
             run_alfred(query)
             return 0
         else:
@@ -281,7 +278,7 @@ class PackalWorkflow(object):
         if key == 'authors':
             key = 'author'
             # Enable `ignore author`
-            valid = False
+            # valid = False
         elif key == 'versions':
             key = 'osx'
 
